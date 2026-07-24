@@ -140,45 +140,62 @@ div[data-testid="stTextInput"] input[readonly] {{
     margin-bottom: 2px;
 }}
 
-/* 결과 리포트 — 2칼럼 압축 뷰, 웹 1페이지에 들어오도록 배율(zoom) 축소 */
-.report-scale {{
-    zoom: 0.82;
-}}
+/* 결과 리포트 — 왼쪽 사진 자리 + 오른쪽 단일 칼럼 리포트 본문 */
 .report-title {{
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 700;
     color: {COLOR_DEEP_INK};
     margin-bottom: 2px;
 }}
 .report-sub {{
     color: {COLOR_COOL_ASH};
-    font-size: 13px;
+    font-size: 14px;
     margin-bottom: 12px;
-}}
-.report-cols {{
-    display: flex;
-    gap: 32px;
-}}
-.report-col {{
-    flex: 1;
-    min-width: 0;
 }}
 .report-section-title {{
     font-weight: 700;
-    font-size: 14px;
+    font-size: 17px;
     color: {COLOR_DEEP_INK};
     border-top: 1px solid {COLOR_PEBBLE};
-    padding-top: 8px;
-    margin-top: 14px;
+    padding-top: 10px;
+    margin-top: 16px;
 }}
 .report-list {{
-    margin: 4px 0 0 0;
+    margin: 6px 0 0 0;
     padding-left: 18px;
-    font-size: 13px;
-    line-height: 1.5;
+    font-size: 15px;
+    line-height: 1.7;
 }}
 .report-list li {{
-    margin-bottom: 2px;
+    margin-bottom: 3px;
+}}
+.report-list b {{
+    font-size: 16px;
+    font-weight: 700;
+    color: {COLOR_DEEP_INK};
+}}
+
+/* 결과 화면 좌측 — AI 현장 사진(로드뷰 기반 렌더링) 자리. 아직 자동 생성 기능은
+   없어서(specs 상 예정), 사람이 직접 올려서 보여줄 수 있는 자리만 마련해둔 것 */
+.report-photo-slot {{
+    height: 100%;
+    min-height: 320px;
+    border: 1px dashed {COLOR_PEBBLE};
+    border-radius: 8px;
+    background-color: {COLOR_INPUT_FILL};
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: {COLOR_COOL_ASH};
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 24px;
+}}
+.report-photo-slot .icon {{
+    font-size: 40px;
+    margin-bottom: 10px;
 }}
 
 /* 엑셀 분석 탭 — "눈에 띄는 항목" 카드 그리드 */
@@ -403,7 +420,10 @@ def _build_compact_report_html(report: dict, verdict: dict, reasons: list[str]) 
 
     reasons_html = "".join(f"<li>{r}</li>" for r in reasons)
 
-    left = f"""
+    def b(value, unit=""):
+        return f"<b>{_fmt(value, unit)}</b>"
+
+    body = f"""
     <div class="report-section-title">1. 표지</div>
     <ul class="report-list">
         <li>주소지: {cover['주소지']}</li>
@@ -411,11 +431,11 @@ def _build_compact_report_html(report: dict, verdict: dict, reasons: list[str]) 
     </ul>
     <div class="report-section-title">2. 핵심 지표 요약</div>
     <ul class="report-list">
-        <li>Cap Rate: {_fmt(핵심['CapRate_퍼센트'], '%')}</li>
-        <li>용적률: {_fmt(핵심['용적률_퍼센트'], '%')}</li>
-        <li>건폐율: {_fmt(핵심['건폐율_퍼센트'], '%')}</li>
-        <li>Development Profit: {_fmt(핵심['DevelopmentProfit_억원'], '억원')}</li>
-        <li>Development Margin: {_fmt(핵심['DevelopmentMargin_퍼센트'], '%')}</li>
+        <li>Cap Rate: {b(핵심['CapRate_퍼센트'], '%')}</li>
+        <li>용적률: {b(핵심['용적률_퍼센트'], '%')}</li>
+        <li>건폐율: {b(핵심['건폐율_퍼센트'], '%')}</li>
+        <li>Development Profit: {b(핵심['DevelopmentProfit_억원'], '억원')}</li>
+        <li>Development Margin: {b(핵심['DevelopmentMargin_퍼센트'], '%')}</li>
     </ul>
     <div class="report-section-title">3. 부동산 개요</div>
     <ul class="report-list">
@@ -430,9 +450,6 @@ def _build_compact_report_html(report: dict, verdict: dict, reasons: list[str]) 
         <li>공시지가 시세 대비 가격: {_fmt(시세['공시지가시세대비가격_억원'], '억원')}</li>
         <li>매입가능예상가격: {_fmt(시세['매입가능예상가격_억원'], '억원')}</li>
     </ul>
-    """
-
-    right = f"""
     <div class="report-section-title">5. 임차 현황</div>
     <ul class="report-list">
         <li>총 임대인 수: {_fmt(임차['총임대인수_명'], '명')}</li>
@@ -447,30 +464,27 @@ def _build_compact_report_html(report: dict, verdict: dict, reasons: list[str]) 
     </ul>
     <div class="report-section-title">7. 수익성 분석</div>
     <ul class="report-list">
-        <li>NOI: {_fmt(수익['NOI_억원'], '억원')}</li>
-        <li>Cap Rate: {_fmt(수익['CapRate_퍼센트'], '%')}</li>
+        <li>NOI: {b(수익['NOI_억원'], '억원')}</li>
+        <li>Cap Rate: {b(수익['CapRate_퍼센트'], '%')}</li>
     </ul>
     <div class="report-section-title">8. 개발 사업성 분석</div>
     <ul class="report-list">
-        <li>TDC(총개발비용): {_fmt(개발['TDC_억원'], '억원')}</li>
-        <li>GDV(개발 후 가치): {_fmt(개발['GDV_억원'], '억원')}</li>
-        <li>Development Profit: {_fmt(개발['DevelopmentProfit_억원'], '억원')}</li>
-        <li>Development Margin: {_fmt(개발['DevelopmentMargin_퍼센트'], '%')}</li>
+        <li>TDC(총개발비용): {b(개발['TDC_억원'], '억원')}</li>
+        <li>GDV(개발 후 가치): {b(개발['GDV_억원'], '억원')}</li>
+        <li>Development Profit: {b(개발['DevelopmentProfit_억원'], '억원')}</li>
+        <li>Development Margin: {b(개발['DevelopmentMargin_퍼센트'], '%')}</li>
     </ul>
     """
 
     return f"""
-    <div class="report-scale">
+    <div>
         <div class="report-title">부동산 개발 리포트 — {cover['주소지']}</div>
         <div class="report-sub">작성일: {cover['작성일']}</div>
         <div class="verdict-badge">사업성 해석: {verdict['라벨']}
             <span class="verdict-sub">산정방식: {verdict['생성방식']}</span>
         </div>
         <ul class="verdict-reasons">{reasons_html}</ul>
-        <div class="report-cols">
-            <div class="report-col">{left}</div>
-            <div class="report-col">{right}</div>
-        </div>
+        {body}
     </div>
     """
 
@@ -722,7 +736,23 @@ with tab_realestate:
             st.markdown(f"- {err}")
 
     if st.session_state.get("report_html"):
-        st.markdown(st.session_state["report_html"], unsafe_allow_html=True)
+        photo_col, content_col = st.columns([2, 3])
+        with photo_col:
+            site_image = st.file_uploader(
+                "AI 현장 사진 (선택 — 로드뷰 기반 렌더링 이미지)",
+                type=["png", "jpg", "jpeg"],
+                key="site_image_upload",
+            )
+            if site_image is not None:
+                st.image(site_image, use_container_width=True)
+            else:
+                st.markdown(
+                    '<div class="report-photo-slot"><div class="icon">🏢</div>'
+                    "AI 현장 사진 자리<br>주소 로드뷰 기반 렌더링 사진(준비 중)</div>",
+                    unsafe_allow_html=True,
+                )
+        with content_col:
+            st.markdown(st.session_state["report_html"], unsafe_allow_html=True)
 
     if st.session_state.get("do_scroll"):
         st.session_state["do_scroll"] = False
