@@ -448,10 +448,26 @@ def _load_chatbot_context() -> str:
     return "\n\n".join(parts)
 
 
+def _get_openai_api_key() -> str | None:
+    """로컬(.env → os.environ)과 Streamlit Community Cloud(secrets) 양쪽에서 다 동작하게.
+
+    배포 환경에는 .env 파일이 올라가지 않으므로(.gitignore), Streamlit Cloud의
+    "Secrets" 설정(st.secrets)에 넣은 값도 확인한다. 로컬에서는 os.environ이 이미
+    채워져 있어 그대로 쓰고, 없을 때만 st.secrets를 본다.
+    """
+    key = os.environ.get("OPENAI_API_KEY")
+    if key:
+        return key
+    try:
+        return st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        return None
+
+
 def _chatbot_reply(history: list) -> str:
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = _get_openai_api_key()
     if not api_key:
-        return "OPENAI_API_KEY가 .env에 설정되어 있지 않아 답변할 수 없습니다."
+        return "OPENAI_API_KEY가 설정되어 있지 않아 답변할 수 없습니다. (.env 또는 Streamlit Secrets 확인)"
 
     system_prompt = (
         "너는 이 웹 서비스(아래 문서에 설명된 부동산 개발 리포트 자동화 앱)를 소개하는 "
