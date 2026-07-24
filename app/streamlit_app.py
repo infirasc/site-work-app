@@ -175,11 +175,11 @@ div[data-testid="stTextInput"] input[readonly] {{
     color: {COLOR_DEEP_INK};
 }}
 
-/* 결과 화면 좌측 — AI 현장 사진(로드뷰 기반 렌더링) 자리. 아직 자동 생성 기능은
-   없어서(specs 상 예정), 사람이 직접 올려서 보여줄 수 있는 자리만 마련해둔 것 */
+/* 결과 화면 좌측 — 현장 사진(로드뷰 기반 AI 렌더링 예정) + 지도 사진, 두 장이 위아래로
+   쌓이는 자리. 아직 자동 생성/조회 기능은 없어서(specs 상 예정), 사람이 직접 올려서
+   보여줄 수 있는 자리만 마련해둔 것 */
 .report-photo-slot {{
-    height: 100%;
-    min-height: 320px;
+    min-height: 220px;
     border: 1px dashed {COLOR_PEBBLE};
     border-radius: 8px;
     background-color: {COLOR_INPUT_FILL};
@@ -618,6 +618,27 @@ with tab_realestate:
             setTimeout(function () { tryMarkReadonly(attemptsLeft - 1); }, 150);
           }
         })(20);
+
+        // 카카오 주소 검색 위젯(GitHub Pages, 다른 origin)이 postMessage로 보내는 선택
+        // 결과를 받아 "주소" input에 반영한다. 이 스크립트는 Streamlit 페이지와 같은
+        // origin으로 취급되므로(sandbox의 allow-same-origin) window.parent.document에
+        // 접근할 수 있지만, 검색 위젯 쪽은 진짜 다른 origin이라 거기서 직접 반영할 수
+        // 없어서 이렇게 postMessage로 값만 건네받아 처리한다.
+        window.parent.addEventListener('message', function (event) {
+          if (event.origin !== 'https://infirasc.github.io') return;
+          if (!event.data || event.data.type !== 'kakao-address-complete') return;
+          var input = window.parent.document.querySelector("input[aria-label='주소']");
+          if (!input) return;
+          // focus를 먼저 줘야 Streamlit이 "진짜 사용자가 입력했다"고 인식하고 값을
+          // 백엔드로 반영한다 — focus 없이 값만 바꾸고 blur()만 호출하면 화면엔 보여도
+          // 세션 상태(파이썬 쪽)에는 반영이 안 되는 문제가 있었음.
+          input.focus();
+          var setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value').set;
+          setter.call(input, event.data.address);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          input.blur();
+        });
         </script>
         """,
         height=0,
@@ -749,6 +770,20 @@ with tab_realestate:
                 st.markdown(
                     '<div class="report-photo-slot"><div class="icon">🏢</div>'
                     "AI 현장 사진 자리<br>주소 로드뷰 기반 렌더링 사진(준비 중)</div>",
+                    unsafe_allow_html=True,
+                )
+
+            map_image = st.file_uploader(
+                "지도 사진 (선택 — 위치 확인용)",
+                type=["png", "jpg", "jpeg"],
+                key="map_image_upload",
+            )
+            if map_image is not None:
+                st.image(map_image, use_container_width=True)
+            else:
+                st.markdown(
+                    '<div class="report-photo-slot"><div class="icon">🗺️</div>'
+                    "지도 사진 자리<br>위치 확인용 지도 이미지(준비 중)</div>",
                     unsafe_allow_html=True,
                 )
         with content_col:
