@@ -118,59 +118,60 @@ div[data-testid="stTextInput"] input[readonly] {{
     background-color: {COLOR_CLAY_EMBER};
     color: {COLOR_PURE_WHITE};
     border-radius: 4px;
-    padding: 16px 20px;
-    font-size: 18px;
+    padding: 10px 14px;
+    font-size: 14px;
     font-weight: 700;
-    margin: 16px 0 4px 0;
+    margin: 10px 0 3px 0;
 }}
 .verdict-badge .verdict-sub {{
     display: block;
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 400;
     opacity: 0.9;
 }}
 .verdict-reasons {{
-    margin: 4px 0 16px 0;
-    padding-left: 20px;
-    font-size: 13px;
+    margin: 3px 0 10px 0;
+    padding-left: 18px;
+    font-size: 11.5px;
     color: {COLOR_COOL_ASH};
 }}
 .verdict-reasons li {{
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }}
 
-/* 결과 리포트 — 왼쪽 사진 자리 + 오른쪽 단일 칼럼 리포트 본문 */
+/* 결과 리포트 — 왼쪽 사진 자리 + 오른쪽 단일 칼럼 리포트 본문. 8개 섹션 + 사진
+   2장이 한 화면에 들어오도록 전체적으로 촘촘한(compact) 비율로 맞춘 크기값 */
 .report-title {{
-    font-size: 26px;
+    font-size: 19px;
     font-weight: 700;
     color: {COLOR_DEEP_INK};
-    margin-bottom: 2px;
+    margin-bottom: 1px;
 }}
 .report-sub {{
     color: {COLOR_COOL_ASH};
-    font-size: 14px;
-    margin-bottom: 12px;
+    font-size: 11.5px;
+    margin-bottom: 6px;
 }}
 .report-section-title {{
     font-weight: 700;
-    font-size: 17px;
+    font-size: 13px;
     color: {COLOR_DEEP_INK};
     border-top: 1px solid {COLOR_PEBBLE};
-    padding-top: 10px;
-    margin-top: 16px;
+    padding-top: 5px;
+    margin-top: 9px;
 }}
 .report-list {{
-    margin: 6px 0 0 0;
-    padding-left: 18px;
-    font-size: 15px;
-    line-height: 1.7;
+    margin: 3px 0 0 0;
+    padding-left: 16px;
+    font-size: 12px;
+    line-height: 1.45;
 }}
 .report-list li {{
-    margin-bottom: 3px;
+    margin-bottom: 1px;
 }}
 .report-list b {{
-    font-size: 16px;
+    font-size: 13.5px;
     font-weight: 700;
     color: {COLOR_DEEP_INK};
 }}
@@ -179,7 +180,7 @@ div[data-testid="stTextInput"] input[readonly] {{
    쌓이는 자리. 아직 자동 생성/조회 기능은 없어서(specs 상 예정), 사람이 직접 올려서
    보여줄 수 있는 자리만 마련해둔 것 */
 .report-photo-slot {{
-    min-height: 220px;
+    min-height: 130px;
     border: 1px dashed {COLOR_PEBBLE};
     border-radius: 8px;
     background-color: {COLOR_INPUT_FILL};
@@ -189,13 +190,19 @@ div[data-testid="stTextInput"] input[readonly] {{
     justify-content: center;
     text-align: center;
     color: {COLOR_COOL_ASH};
-    font-size: 14px;
-    line-height: 1.6;
-    padding: 24px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    padding: 12px;
 }}
 .report-photo-slot .icon {{
-    font-size: 40px;
-    margin-bottom: 10px;
+    font-size: 26px;
+    margin-bottom: 6px;
+}}
+/* 결과 화면 전체(사진 2장 + 8개 섹션)를 한 화면에 들어오도록 균일한 비율로 축소.
+   위의 글자 크기 자체도 이미 촘촘하게 줄여뒀고, 이 zoom은 그 위에 마지막으로 얹는
+   추가 축소분 — 사진 업로드 위젯을 포함해 이 컨테이너 안 전체에 고르게 적용된다. */
+.st-key-report_result_scale {{
+    zoom: 0.6;
 }}
 
 /* 엑셀 분석 탭 — "눈에 띄는 항목" 카드 그리드 */
@@ -757,37 +764,38 @@ with tab_realestate:
             st.markdown(f"- {err}")
 
     if st.session_state.get("report_html"):
-        photo_col, content_col = st.columns([2, 3])
-        with photo_col:
-            site_image = st.file_uploader(
-                "AI 현장 사진 (선택 — 로드뷰 기반 렌더링 이미지)",
-                type=["png", "jpg", "jpeg"],
-                key="site_image_upload",
-            )
-            if site_image is not None:
-                st.image(site_image, use_container_width=True)
-            else:
-                st.markdown(
-                    '<div class="report-photo-slot"><div class="icon">🏢</div>'
-                    "AI 현장 사진 자리<br>주소 로드뷰 기반 렌더링 사진(준비 중)</div>",
-                    unsafe_allow_html=True,
+        with st.container(key="report_result_scale"):
+            photo_col, content_col = st.columns([2, 3])
+            with photo_col:
+                site_image = st.file_uploader(
+                    "AI 현장 사진 (선택 — 로드뷰 기반 렌더링 이미지)",
+                    type=["png", "jpg", "jpeg"],
+                    key="site_image_upload",
                 )
+                if site_image is not None:
+                    st.image(site_image, use_container_width=True)
+                else:
+                    st.markdown(
+                        '<div class="report-photo-slot"><div class="icon">🏢</div>'
+                        "AI 현장 사진 자리<br>주소 로드뷰 기반 렌더링 사진(준비 중)</div>",
+                        unsafe_allow_html=True,
+                    )
 
-            map_image = st.file_uploader(
-                "지도 사진 (선택 — 위치 확인용)",
-                type=["png", "jpg", "jpeg"],
-                key="map_image_upload",
-            )
-            if map_image is not None:
-                st.image(map_image, use_container_width=True)
-            else:
-                st.markdown(
-                    '<div class="report-photo-slot"><div class="icon">🗺️</div>'
-                    "지도 사진 자리<br>위치 확인용 지도 이미지(준비 중)</div>",
-                    unsafe_allow_html=True,
+                map_image = st.file_uploader(
+                    "지도 사진 (선택 — 위치 확인용)",
+                    type=["png", "jpg", "jpeg"],
+                    key="map_image_upload",
                 )
-        with content_col:
-            st.markdown(st.session_state["report_html"], unsafe_allow_html=True)
+                if map_image is not None:
+                    st.image(map_image, use_container_width=True)
+                else:
+                    st.markdown(
+                        '<div class="report-photo-slot"><div class="icon">🗺️</div>'
+                        "지도 사진 자리<br>위치 확인용 지도 이미지(준비 중)</div>",
+                        unsafe_allow_html=True,
+                    )
+            with content_col:
+                st.markdown(st.session_state["report_html"], unsafe_allow_html=True)
 
     if st.session_state.get("do_scroll"):
         st.session_state["do_scroll"] = False
