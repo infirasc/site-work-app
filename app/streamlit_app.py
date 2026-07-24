@@ -9,6 +9,7 @@ main.py(터미널 실행용)와 이 파일은 서로 독립적으로 같은 파�
 (라이트 테마 강제·입력창 배경색은 프로젝트 루트의 .streamlit/config.toml에서 설정함)
 """
 
+import io
 import os
 import sys
 from datetime import date
@@ -319,6 +320,57 @@ def _fmt(value, unit=""):
     return str(value)
 
 
+# 엑셀 항목명 -> 필드 키. 라벨("연면적 (m²)")과 필드 키("연면적_m2") 둘 다 인식한다.
+_REQUIRED_FIELD_LOOKUP = {}
+for _field_key, _field_label in REQUIRED_FIELD_META:
+    _REQUIRED_FIELD_LOOKUP[_field_key.strip()] = _field_key
+    _REQUIRED_FIELD_LOOKUP[_field_label.strip()] = _field_key
+
+
+def _build_required_fields_template_bytes() -> bytes:
+    df = pd.DataFrame({
+        "항목": [label for _, label in REQUIRED_FIELD_META],
+        "값": ["" for _ in REQUIRED_FIELD_META],
+    })
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+    return buf.getvalue()
+
+
+def _apply_excel_to_required_fields(uploaded_file):
+    """엑셀(1열: 항목명, 2열: 값, 1행은 머리글)을 읽어 필수 입력값 위젯의 session_state를 채운다.
+
+    호출 시점이 중요하다 — 해당 required_<field> text_input 위젯이 이번 실행에서
+    아직 생성되기 전이어야 한다(위젯 생성 후에는 그 키로 session_state를 재대입할 수 없음).
+    """
+    label_by_field = dict(REQUIRED_FIELD_META)
+    try:
+        df = pd.read_excel(uploaded_file)
+    except Exception:
+        return [], [], "엑셀 파일을 읽을 수 없습니다. .xlsx 또는 .xls 형식인지 확인해주세요."
+
+    if df.shape[1] < 2:
+        return [], [], "엑셀에 항목·값, 두 개의 열이 필요합니다."
+
+    filled_labels = []
+    unmatched_names = []
+    for _, row in df.iloc[:, :2].iterrows():
+        raw_name, raw_value = row.iloc[0], row.iloc[1]
+        if pd.isna(raw_name) or pd.isna(raw_value):
+            continue
+        field = _REQUIRED_FIELD_LOOKUP.get(str(raw_name).strip())
+        if field is None:
+            unmatched_names.append(str(raw_name).strip())
+            continue
+        if isinstance(raw_value, float) and raw_value.is_integer():
+            value_str = str(int(raw_value))
+        else:
+            value_str = str(raw_value).strip()
+        st.session_state[f"required_{field}"] = value_str
+        filled_labels.append(label_by_field[field])
+    return filled_labels, unmatched_names, None
+
+
 def _verdict_reasons(핵심: dict, 중간: dict, verdict: dict, calc_unavailable_reason: str | None) -> list[str]:
     """사업성 해석 라벨이 왜 그렇게 나왔는지, 있는 숫자를 근거로 짧게 나열한다.
 
@@ -558,6 +610,46 @@ with tab_realestate:
     )
 
     st.subheader("필수 입력값 (10개, 계산에 반드시 필요)")
+
+    upload_col, template_col = st.columns([3, 1])
+    with upload_col:
+        uploaded_excel = st.file_uploader(
+            "엑셀 파일로 한 번에 채우기 (선택)",
+            type=["xlsx", "xls"],
+            key="required_excel_upload",
+            help="1행은 머리글(항목/값), 2행부터 항목명(라벨 또는 필드명)과 값을 적어주세요. "
+            "오른쪽 '엑셀 템플릿 다운로드'를 참고하세요.",
+        )
+    with template_col:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)  # 라벨 높이만큼 내려서 업로드 칸과 줄 맞춤
+        st.download_button(
+            "엑셀 템플릿 다운로드",
+            data=_build_required_fields_template_bytes(),
+            file_name="필수입력값_템플릿.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    if uploaded_excel is not None:
+        _excel_id = f"{uploaded_excel.name}:{uploaded_excel.size}"
+        if st.session_state.get("_required_excel_id") != _excel_id:
+            filled, unmatched, error = _apply_excel_to_required_fields(uploaded_excel)
+            st.session_state["_required_excel_id"] = _excel_id
+            st.session_state["_required_excel_result"] = (filled, unmatched, error)
+    else:
+        st.session_state.pop("_required_excel_id", None)
+        st.session_state.pop("_required_excel_result", None)
+
+    _excel_result = st.session_state.get("_required_excel_result")
+    if _excel_result:
+        _filled, _unmatched, _error = _excel_result
+        if _error:
+            st.error(_error)
+        else:
+            if _filled:
+                st.success(f"엑셀에서 {len(_filled)}개 항목을 채웠습니다: {', '.join(_filled)}")
+            if _unmatched:
+                st.warning(f"인식하지 못한 항목(직접 입력해주세요): {', '.join(_unmatched)}")
+
     required_raw = {}
     cols = st.columns(2)
     for i, (field, label) in enumerate(REQUIRED_FIELD_META):
