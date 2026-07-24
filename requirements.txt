@@ -1,0 +1,17 @@
+# 이 저장소를 다른 환경에서 그대로 실행하기 위한 의존성 목록.
+# `python3 -m pip install -r requirements.txt`로 설치.
+# (가상환경은 이 프로젝트의 관례상 안 씀 — CLAUDE.md 참고. 원하면 venv 안에서 써도 무방)
+#
+# 어디서 쓰는지:
+# - streamlit, pandas, openpyxl: app/streamlit_app.py (웹 화면, 엑셀 분석 탭)
+# - openai, python-dotenv: app/streamlit_app.py(챗봇)와 practice/app/*.py(이미지 생성·메모
+#   분류·할 일/핵심 추출·GPT 교차검증) — 전부 OPENAI_API_KEY를 .env에서 읽어다 씀
+#
+# app/main.py, calc_engine.py, report_mapper.py, report_renderer.py는 표준 라이브러리만
+# 사용해서 별도 의존성이 없음.
+
+streamlit==1.60.0
+pandas==3.0.5
+openpyxl==3.1.5
+python-dotenv==1.2.2
+openai==2.47.0

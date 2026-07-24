@@ -7,3 +7,9 @@ primaryColor = "#000d10"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f4f3f1"
 textColor = "#000d10"
+
+# app/static/의 파일을 /app/static/<파일명>으로 서빙. 카카오 주소 검색 위젯을
+# components.html()의 sandboxed iframe이 아니라 components.v1.iframe(src=...)로
+# 불러오기 위해 필요 — sandbox 제약 때문에 클릭 완료 신호가 안 오던 문제를 우회.
+[server]
+enableStaticServing = true
