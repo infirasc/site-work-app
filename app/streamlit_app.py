@@ -1,0 +1,474 @@
+"""부동산 개발 리포트 자동화 — 터미널 없이 쓰는 웹 화면 (Streamlit).
+
+기존 파이프라인(calc_engine.py → report_mapper.py → report_renderer.py)은
+전혀 건드리지 않고, 그 위에 입력 폼 + 버튼 + 결과 화면(2칼럼 압축 뷰 + .md 다운로드)만 얹은 것이다.
+main.py(터미널 실행용)와 이 파일은 서로 독립적으로 같은 파이프라인을 호출한다.
+
+실행법:
+    streamlit run app/streamlit_app.py
+(라이트 테마 강제·입력창 배경색은 프로젝트 루트의 .streamlit/config.toml에서 설정함)
+"""
+
+import os
+import sys
+from datetime import date
+
+import streamlit as st
+import streamlit.components.v1 as components
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from calc_engine import REQUIRED_FIELDS, calculate
+from report_mapper import REFERENCE_FIELDS, map_report
+from report_renderer import interpret_margin, render_markdown
+
+# "Hyer Aviation" 스타일 가이드(DESIGN (2).md)에서 가져온 디자인 토큰.
+# 187px 히어로 타이포·3D 제트 이미지 같은 브랜드 전용 요소는 이 폼 화면 성격과 안 맞아 빼고,
+# 색상·타이포 굵기/자간·필 버튼·헤어라인 구분선·클레이 강조색 1곳(사업성 해석 배지)만 가져옴.
+COLOR_DEEP_INK = "#000d10"
+COLOR_PURE_WHITE = "#ffffff"
+COLOR_COOL_ASH = "#8e8e95"
+COLOR_PEBBLE = "#d5d3d4"
+COLOR_CLAY_EMBER = "#bc7155"
+COLOR_INPUT_FILL = "#f4f3f1"  # 기존 진한 배경 대신 쓰는 연한 입력창 색 (.streamlit/config.toml의 secondaryBackgroundColor와 동일)
+
+DESIGN_CSS = f"""
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
+/* .stApp에만 걸어서 상속으로 퍼지게 함 — 아이콘 폰트(stIconMaterial)에는 안 번지도록 광범위 셀렉터는 피함 */
+.stApp {{
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    background-color: {COLOR_PURE_WHITE};
+    color: {COLOR_DEEP_INK};
+}}
+div[data-testid="stIconMaterial"] {{
+    font-family: 'Material Symbols Rounded' !important;
+}}
+
+/* 헤딩: 근흑색 + 볼드 + 타이트한 자간 (Hyer의 "무게 자체가 브랜드 목소리" 원칙) */
+h1, h2, h3 {{
+    color: {COLOR_DEEP_INK} !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+}}
+h2 {{
+    border-top: 1px solid {COLOR_PEBBLE};
+    padding-top: 28px !important;
+    margin-top: 12px !important;
+}}
+
+/* 캡션(부제) 텍스트는 톤 다운된 애시 그레이 */
+div[data-testid="stCaptionContainer"] p {{
+    color: {COLOR_COOL_ASH} !important;
+}}
+
+/* 입력창 라벨(제목) — 라이트/다크 모드와 무관하게 항상 진하게 보이도록 강제 (전에 안 보이던 문제 수정) */
+label[data-testid="stWidgetLabel"] p,
+div[data-testid="stWidgetLabel"] p {{
+    color: {COLOR_DEEP_INK} !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+}}
+
+/* 기본(secondary) 버튼: 필 모양 + 헤어라인 테두리 */
+button[data-testid="stBaseButton-secondary"] {{
+    border-radius: 1000px !important;
+    border: 1px solid {COLOR_DEEP_INK} !important;
+    color: {COLOR_DEEP_INK} !important;
+}}
+/* 주요(primary) 버튼 = "리포트 생성": 근흑색 필 버튼 — Hyer의 Filled Dark Pill Button */
+button[data-testid="stBaseButton-primary"] {{
+    background-color: {COLOR_DEEP_INK} !important;
+    border: none !important;
+    border-radius: 1000px !important;
+    color: {COLOR_PURE_WHITE} !important;
+    font-weight: 700 !important;
+    padding: 4px 28px !important;
+}}
+button[data-testid="stBaseButton-primary"]:hover {{
+    background-color: #1a2a30 !important;
+    color: {COLOR_PURE_WHITE} !important;
+}}
+
+/* 입력창: 진한 배경 대신 연한 배경 + 헤어라인 테두리, 그림자 없음 */
+div[data-testid="stTextInput"] input,
+div[data-baseweb="select"] > div {{
+    background-color: {COLOR_INPUT_FILL} !important;
+    border-radius: 4px !important;
+    border: 1px solid {COLOR_PEBBLE} !important;
+    box-shadow: none !important;
+    color: {COLOR_DEEP_INK} !important;
+}}
+
+/* "주소" 입력칸을 화면에서 숨김 — 카카오 검색창이 유일한 주소 입력 UI가 되고,
+   이 text_input은 JS가 선택된 주소를 적어 넣는 보이지 않는 다리 역할만 함 */
+.st-key-hidden_address_bridge {{
+    display: none;
+}}
+
+/* 사업성 해석 배지 — Hyer의 "클레이 강조색은 페이지당 딱 한 곳" 원칙을 여기 하나에만 적용 */
+.verdict-badge {{
+    background-color: {COLOR_CLAY_EMBER};
+    color: {COLOR_PURE_WHITE};
+    border-radius: 4px;
+    padding: 16px 20px;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 16px 0 4px 0;
+}}
+.verdict-badge .verdict-sub {{
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 400;
+    opacity: 0.9;
+}}
+.verdict-reasons {{
+    margin: 4px 0 16px 0;
+    padding-left: 20px;
+    font-size: 13px;
+    color: {COLOR_COOL_ASH};
+}}
+.verdict-reasons li {{
+    margin-bottom: 2px;
+}}
+
+/* 결과 리포트 — 2칼럼 압축 뷰, 웹 1페이지에 들어오도록 배율(zoom) 축소 */
+.report-scale {{
+    zoom: 0.82;
+}}
+.report-title {{
+    font-size: 22px;
+    font-weight: 700;
+    color: {COLOR_DEEP_INK};
+    margin-bottom: 2px;
+}}
+.report-sub {{
+    color: {COLOR_COOL_ASH};
+    font-size: 13px;
+    margin-bottom: 12px;
+}}
+.report-cols {{
+    display: flex;
+    gap: 32px;
+}}
+.report-col {{
+    flex: 1;
+    min-width: 0;
+}}
+.report-section-title {{
+    font-weight: 700;
+    font-size: 14px;
+    color: {COLOR_DEEP_INK};
+    border-top: 1px solid {COLOR_PEBBLE};
+    padding-top: 8px;
+    margin-top: 14px;
+}}
+.report-list {{
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+    font-size: 13px;
+    line-height: 1.5;
+}}
+.report-list li {{
+    margin-bottom: 2px;
+}}
+</style>
+"""
+
+# (필드 키, 화면에 보여줄 라벨) — REQUIRED_FIELDS/REFERENCE_FIELDS와 어긋나면 바로 알아채도록 아래에서 검증함
+REQUIRED_FIELD_META = [
+    ("연면적_m2", "연면적 (m²)"),
+    ("건축면적_m2", "건축면적 (m²)"),
+    ("대지면적_m2", "대지면적 (m²)"),
+    ("총보증금_억원", "총 보증금 (억원)"),
+    ("총월임대료_억원", "총 월임대료 (억원)"),
+    ("총관리비_억원_연간", "총 관리비 (억원, 연간)"),
+    ("매입가능예상가격_억원", "매입가능예상가격 (억원)"),
+    ("전월세환산이율_퍼센트", "전월세 환산이율 (%)"),
+    ("평당건축비_억원", "평당 건축비 (억원)"),
+    ("ExitCapRate_퍼센트", "Exit Cap Rate (%)"),
+]
+
+REFERENCE_FIELD_META = [
+    ("주변실거래및감정평가시세_억원", "주변 실거래 및 감정평가 시세 (억원)", "number"),
+    ("매물시세_억원", "매물 시세 (억원)", "number"),
+    ("공시지가시세대비가격_억원", "공시지가 시세 대비 가격 (억원)", "number"),
+    ("건물연식_준공연도", "건물 연식 (준공연도)", "number"),
+    ("총임대인수_명", "총 임대인 수 (명)", "number"),
+    ("유동인구_명", "유동인구 (명)", "number"),
+    ("엘리베이터유무", "엘리베이터 유무", "bool"),
+    ("주차장_면", "주차장 (면)", "number"),
+]
+
+assert {k for k, _ in REQUIRED_FIELD_META} == set(REQUIRED_FIELDS), "REQUIRED_FIELD_META가 calc_engine.REQUIRED_FIELDS와 어긋남"
+assert {k for k, _, _ in REFERENCE_FIELD_META} == set(REFERENCE_FIELDS), "REFERENCE_FIELD_META가 report_mapper.REFERENCE_FIELDS와 어긋남"
+
+# 카카오 우편번호(주소 검색) — 별도 입력칸/버튼 없이, 이 검색창 자체가 유일한 주소 입력 UI.
+# 페이지에 항상 그려두고(토글 없음), 주소를 고르면 부모 문서(Streamlit 페이지)의 숨겨진
+# "주소" input(hidden_address_bridge)을 JS로 직접 채우고 input/change 이벤트를 발생시켜
+# React(Streamlit 프론트엔드)가 값 변경을 인식하게 만든다.
+# 팝업(.open()) 대신 embed()를 쓰는 이유: 팝업 방식은 별도 창을 열고 그 창이 다시 opener
+# 창으로 결과를 돌려주는 다단계 구조라 더 복잡하고 불안정함.
+KAKAO_EMBED_HTML = """
+<div id="kakao-postcode-embed" style="width:100%; height:460px; border:1px solid #d5d3d4;"></div>
+<script src="//t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script>
+new kakao.Postcode({
+  oncomplete: function (data) {
+    var fullAddress = data.address;
+    var extra = '';
+    if (data.addressType === 'R') {
+      if (data.bname !== '') extra += data.bname;
+      if (data.buildingName !== '') extra += (extra !== '' ? ', ' + data.buildingName : data.buildingName);
+      if (extra !== '') fullAddress += ' (' + extra + ')';
+    }
+    var input = window.parent.document.querySelector("input[aria-label='주소']");
+    if (input) {
+      var setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, fullAddress);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.blur();
+    }
+  },
+  width: '100%',
+  height: '100%'
+}).embed(document.getElementById('kakao-postcode-embed'));
+</script>
+"""
+
+
+def _parse_number(raw: str):
+    """빈 문자열은 None(값 없음)으로, 그 외는 float 변환을 시도하고 실패하면 원본 문자열 그대로 둔다.
+
+    숫자 변환 실패를 여기서 에러 처리하지 않는 이유: calc_engine.validate()가
+    "숫자가 아님"을 이미 판단해주므로, 검증 로직을 이 화면에 중복으로 두지 않기 위함.
+    """
+    raw = raw.strip()
+    if raw == "":
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return raw
+
+
+def _fmt(value, unit=""):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value}{unit}"
+    return str(value)
+
+
+def _verdict_reasons(핵심: dict, 중간: dict, verdict: dict, calc_unavailable_reason: str | None) -> list[str]:
+    """사업성 해석 라벨이 왜 그렇게 나왔는지, 있는 숫자를 근거로 짧게 나열한다.
+
+    별도 AI 호출 없이 이미 계산된 값(핵심지표/중간값)만으로 규칙 기반 이유를 만든다 —
+    report_renderer.interpret_margin()과 같은 "규칙 기반" 원칙을 유지하기 위함.
+    """
+    margin = 핵심["DevelopmentMargin_퍼센트"]
+    if not isinstance(margin, (int, float)):
+        return [calc_unavailable_reason] if calc_unavailable_reason else ["계산값이 없어 해석 근거를 만들 수 없음"]
+
+    profit = 핵심["DevelopmentProfit_억원"]
+    cap_rate = 핵심["CapRate_퍼센트"]
+    return [
+        f"Development Margin이 {margin}%로 '{verdict['라벨']}' 구간(기준: 0 이하/0~50/50~100/100 이상)에 해당함",
+        f"Development Profit이 {profit}억원으로 {'적자' if profit < 0 else '흑자'}임",
+        f"Cap Rate는 {cap_rate}%로, 매입가 대비 연간 수익률 수준임",
+    ]
+
+
+def _build_compact_report_html(report: dict, verdict: dict, reasons: list[str]) -> str:
+    """리포트 8개 섹션을 2칼럼 HTML로 압축해, 웹에서 한 화면에 들어오도록 만든다."""
+    cover = report["1_표지"]
+    핵심 = report["2_핵심지표요약"]
+    개요 = report["3_부동산개요"]
+    시세 = report["4_시세정보"]
+    임차 = report["5_임차현황"]
+    입지 = report["6_입지특성"]
+    수익 = report["7_수익성분석"]
+    개발 = report["8_개발사업성분석"]
+
+    reasons_html = "".join(f"<li>{r}</li>" for r in reasons)
+
+    left = f"""
+    <div class="report-section-title">1. 표지</div>
+    <ul class="report-list">
+        <li>주소지: {cover['주소지']}</li>
+        <li>작성일: {cover['작성일']}</li>
+    </ul>
+    <div class="report-section-title">2. 핵심 지표 요약</div>
+    <ul class="report-list">
+        <li>Cap Rate: {_fmt(핵심['CapRate_퍼센트'], '%')}</li>
+        <li>용적률: {_fmt(핵심['용적률_퍼센트'], '%')}</li>
+        <li>건폐율: {_fmt(핵심['건폐율_퍼센트'], '%')}</li>
+        <li>Development Profit: {_fmt(핵심['DevelopmentProfit_억원'], '억원')}</li>
+        <li>Development Margin: {_fmt(핵심['DevelopmentMargin_퍼센트'], '%')}</li>
+    </ul>
+    <div class="report-section-title">3. 부동산 개요</div>
+    <ul class="report-list">
+        <li>연면적 {_fmt(개요['연면적_m2'], 'm²')} · 건축면적 {_fmt(개요['건축면적_m2'], 'm²')} · 대지면적 {_fmt(개요['대지면적_m2'], 'm²')}</li>
+        <li>건물 연식(준공연도): {_fmt(개요['건물연식_준공연도'])}</li>
+        <li>용적률 {_fmt(개요['용적률_퍼센트'], '%')} · 건폐율 {_fmt(개요['건폐율_퍼센트'], '%')}</li>
+    </ul>
+    <div class="report-section-title">4. 시세 정보</div>
+    <ul class="report-list">
+        <li>주변 실거래·감정평가 시세: {_fmt(시세['주변실거래및감정평가시세_억원'], '억원')}</li>
+        <li>매물 시세: {_fmt(시세['매물시세_억원'], '억원')}</li>
+        <li>공시지가 시세 대비 가격: {_fmt(시세['공시지가시세대비가격_억원'], '억원')}</li>
+        <li>매입가능예상가격: {_fmt(시세['매입가능예상가격_억원'], '억원')}</li>
+    </ul>
+    """
+
+    right = f"""
+    <div class="report-section-title">5. 임차 현황</div>
+    <ul class="report-list">
+        <li>총 임대인 수: {_fmt(임차['총임대인수_명'], '명')}</li>
+        <li>총 보증금: {_fmt(임차['총보증금_억원'], '억원')}</li>
+        <li>총 월임대료: {_fmt(임차['총월임대료_억원'], '억원')} · 총 관리비(연간): {_fmt(임차['총관리비_억원_연간'], '억원')}</li>
+    </ul>
+    <div class="report-section-title">6. 입지 특성</div>
+    <ul class="report-list">
+        <li>유동인구: {_fmt(입지['유동인구_명'], '명')}</li>
+        <li>엘리베이터 유무: {_fmt(입지['엘리베이터유무'])}</li>
+        <li>주차장: {_fmt(입지['주차장_면'], '면')}</li>
+    </ul>
+    <div class="report-section-title">7. 수익성 분석</div>
+    <ul class="report-list">
+        <li>NOI: {_fmt(수익['NOI_억원'], '억원')}</li>
+        <li>Cap Rate: {_fmt(수익['CapRate_퍼센트'], '%')}</li>
+    </ul>
+    <div class="report-section-title">8. 개발 사업성 분석</div>
+    <ul class="report-list">
+        <li>TDC(총개발비용): {_fmt(개발['TDC_억원'], '억원')}</li>
+        <li>GDV(개발 후 가치): {_fmt(개발['GDV_억원'], '억원')}</li>
+        <li>Development Profit: {_fmt(개발['DevelopmentProfit_억원'], '억원')}</li>
+        <li>Development Margin: {_fmt(개발['DevelopmentMargin_퍼센트'], '%')}</li>
+    </ul>
+    """
+
+    return f"""
+    <div class="report-scale">
+        <div class="report-title">부동산 개발 리포트 — {cover['주소지']}</div>
+        <div class="report-sub">작성일: {cover['작성일']}</div>
+        <div class="verdict-badge">사업성 해석: {verdict['라벨']}
+            <span class="verdict-sub">산정방식: {verdict['생성방식']}</span>
+        </div>
+        <ul class="verdict-reasons">{reasons_html}</ul>
+        <div class="report-cols">
+            <div class="report-col">{left}</div>
+            <div class="report-col">{right}</div>
+        </div>
+    </div>
+    """
+
+
+st.set_page_config(page_title="부동산 개발 리포트 자동화", page_icon="🏢", layout="wide")
+st.markdown(DESIGN_CSS, unsafe_allow_html=True)
+st.title("🏢 부동산 개발 리포트 자동화")
+st.caption("주소와 매물 정보를 입력하고 리포트를 생성하세요. (연습용 가상 데이터로만 사용하세요)")
+
+st.header("1. 입력")
+
+# "주소" 입력칸을 따로 안 두고, 카카오 주소 검색창 자체를 주소 입력 UI로 씀.
+# 다만 Streamlit은 JS가 채워준 값을 파이썬으로 돌려받으려면 실제 위젯이 하나 필요하므로,
+# text_input을 화면에서만 숨겨서 "카카오 결과를 받아 적는 다리" 역할로 남겨둔다
+# (아래 hidden-address-bridge CSS로 숨김 — st.container(key=...)가 만들어주는 st-key-* 클래스를 이용).
+with st.container(key="hidden_address_bridge"):
+    address = st.text_input("주소", placeholder="예: 서울시 가상구 테스트로 123 (가상 주소)", label_visibility="collapsed")
+
+if address:
+    st.markdown(f"**선택된 주소:** {address}")
+else:
+    st.caption("아래 카카오 주소 검색에서 주소를 선택하면 여기에 표시됩니다.")
+
+components.html(KAKAO_EMBED_HTML, height=480)
+
+st.subheader("필수 입력값 (10개, 계산에 반드시 필요)")
+required_raw = {}
+cols = st.columns(2)
+for i, (field, label) in enumerate(REQUIRED_FIELD_META):
+    with cols[i % 2]:
+        required_raw[field] = st.text_input(label, key=f"required_{field}")
+
+with st.expander("참고용 입력값 (8개, 선택 — 비워두면 리포트에 '정보 없음'으로 표시됨)"):
+    reference_raw = {}
+    ref_cols = st.columns(2)
+    for i, (field, label, kind) in enumerate(REFERENCE_FIELD_META):
+        with ref_cols[i % 2]:
+            if kind == "bool":
+                choice = st.selectbox(label, ["(선택 안 함)", "있음", "없음"], key=f"reference_{field}")
+                reference_raw[field] = {"(선택 안 함)": None, "있음": True, "없음": False}[choice]
+            else:
+                reference_raw[field] = _parse_number(st.text_input(label, key=f"reference_{field}"))
+
+st.header("2. 리포트 생성")
+submitted = st.button("리포트 생성", type="primary")
+
+if submitted:
+    calc_inputs = {field: _parse_number(required_raw[field]) for field, _ in REQUIRED_FIELD_META}
+    calc_result = calculate(calc_inputs)
+
+    if not calc_result.get("ok"):
+        st.session_state["report_html"] = None
+        st.session_state["report_markdown"] = None
+        st.session_state["errors"] = calc_result["errors"]
+        st.session_state["do_scroll"] = False
+    else:
+        report_result = map_report(
+            calc_result=calc_result,
+            required_inputs=calc_inputs,
+            reference_inputs=reference_raw,
+            address=address or "(주소 미입력)",
+            report_date=date.today().strftime("%Y-%m-%d"),
+        )
+        if not report_result.get("ok"):
+            st.session_state["report_html"] = None
+            st.session_state["report_markdown"] = None
+            st.session_state["errors"] = report_result["errors"]
+            st.session_state["do_scroll"] = False
+        else:
+            핵심 = report_result["report"]["2_핵심지표요약"]
+            중간 = calc_result["중간값"]
+            calc_unavailable_reason = calc_result.get("산출불가사유", {}).get("DevelopmentMargin_퍼센트")
+            verdict = interpret_margin(핵심["DevelopmentMargin_퍼센트"])
+            reasons = _verdict_reasons(핵심, 중간, verdict, calc_unavailable_reason)
+
+            st.session_state["report_html"] = _build_compact_report_html(report_result["report"], verdict, reasons)
+            st.session_state["report_markdown"] = render_markdown(report_result)
+            st.session_state["errors"] = None
+            st.session_state["do_scroll"] = True
+
+header_col, download_col = st.columns([5, 1])
+with header_col:
+    st.header("3. 결과", anchor="report")
+with download_col:
+    if st.session_state.get("report_markdown"):
+        st.download_button(
+            "내려받기.md",
+            data=st.session_state["report_markdown"],
+            file_name="리포트.md",
+            mime="text/markdown",
+        )
+
+if st.session_state.get("errors"):
+    st.error("다음 항목을 확인해주세요:")
+    for err in st.session_state["errors"]:
+        st.markdown(f"- {err}")
+
+if st.session_state.get("report_html"):
+    st.markdown(st.session_state["report_html"], unsafe_allow_html=True)
+
+if st.session_state.get("do_scroll"):
+    st.session_state["do_scroll"] = False
+    components.html(
+        """
+        <script>
+        var target = window.parent.document.querySelector('h1#report, h2#report, h3#report');
+        if (target) { target.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+        </script>
+        """,
+        height=0,
+    )

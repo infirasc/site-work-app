@@ -1,0 +1,9 @@
+# Streamlit 테마 설정 — app/streamlit_app.py 전용.
+# 브라우저/OS가 다크 모드일 때 Streamlit이 자동으로 다크 테마를 골라 위젯 라벨(제목) 글자색이
+# 흰색으로 나와 안 보이고 입력창 배경이 진해지는 문제가 있었음. base="light"로 강제 고정해서 해결.
+[theme]
+base = "light"
+primaryColor = "#000d10"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f3f1"
+textColor = "#000d10"

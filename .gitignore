@@ -1,0 +1,17 @@
+# 비밀 키 — 실제 .env는 절대 올리지 않고, 형식 안내용 .env.example만 추적
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Claude Code 전용 도구 — 이 폴더는 앱 실행과 무관(app/의 코드가 불러다 쓰지 않음),
+# .claude/skills/에 있던 스킬 정의는 이 로컬 환경에는 그대로 남아있고 계속 쓸 수 있음.
+# 깃에서만 빠지는 것이지 로컬에서 삭제되는 게 아님.
+.claude/
+
+# 파이썬 캐시 — 실행할 때마다 자동 생성되는 바이트코드 캐시, 소스 아님
+__pycache__/
+*.pyc
+
+# macOS Finder가 폴더마다 만드는 메타데이터 파일
+.DS_Store
