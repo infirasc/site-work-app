@@ -199,10 +199,32 @@ div[data-testid="stTextInput"] input[readonly] {{
     margin-bottom: 6px;
 }}
 /* 결과 화면 전체(사진 2장 + 8개 섹션)를 한 화면에 들어오도록 균일한 비율로 축소.
-   위의 글자 크기 자체도 이미 촘촘하게 줄여뒀고, 이 zoom은 그 위에 마지막으로 얹는
-   추가 축소분 — 사진 업로드 위젯을 포함해 이 컨테이너 안 전체에 고르게 적용된다. */
+   모바일 등 좁은 화면에서는 원래 크기로 두고 세로로 자연스럽게 스크롤하게 두고,
+   웹(PC, 900px 이상)에서만 한 화면에 들어오도록 축소한다. */
 .st-key-report_result_scale {{
-    zoom: 0.6;
+    zoom: 1;
+}}
+@media (min-width: 900px) {{
+    .st-key-report_result_scale {{
+        zoom: 0.6;
+    }}
+}}
+
+/* 결과 화면 좌측의 사진 2장(현장 사진·지도 사진) — 좁은 화면(모바일)에서는 지금처럼
+   위아래로 쌓고, 웹(PC, 900px 이상)에서는 가로로 나란히 배치해 세로 높이를 줄인다. */
+.st-key-photo_pair_row {{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}}
+.st-key-site_photo_block, .st-key-map_photo_block {{
+    flex: 1;
+    min-width: 0;
+}}
+@media (min-width: 900px) {{
+    .st-key-photo_pair_row {{
+        flex-direction: row;
+    }}
 }}
 
 /* 엑셀 분석 탭 — "눈에 띄는 항목" 카드 그리드 */
@@ -767,33 +789,36 @@ with tab_realestate:
         with st.container(key="report_result_scale"):
             photo_col, content_col = st.columns([2, 3])
             with photo_col:
-                site_image = st.file_uploader(
-                    "AI 현장 사진 (선택 — 로드뷰 기반 렌더링 이미지)",
-                    type=["png", "jpg", "jpeg"],
-                    key="site_image_upload",
-                )
-                if site_image is not None:
-                    st.image(site_image, use_container_width=True)
-                else:
-                    st.markdown(
-                        '<div class="report-photo-slot"><div class="icon">🏢</div>'
-                        "AI 현장 사진 자리<br>주소 로드뷰 기반 렌더링 사진(준비 중)</div>",
-                        unsafe_allow_html=True,
-                    )
+                with st.container(key="photo_pair_row"):
+                    with st.container(key="site_photo_block"):
+                        site_image = st.file_uploader(
+                            "AI 현장 사진 (선택 — 로드뷰 기반 렌더링 이미지)",
+                            type=["png", "jpg", "jpeg"],
+                            key="site_image_upload",
+                        )
+                        if site_image is not None:
+                            st.image(site_image, use_container_width=True)
+                        else:
+                            st.markdown(
+                                '<div class="report-photo-slot"><div class="icon">🏢</div>'
+                                "AI 현장 사진 자리<br>주소 로드뷰 기반 렌더링 사진(준비 중)</div>",
+                                unsafe_allow_html=True,
+                            )
 
-                map_image = st.file_uploader(
-                    "지도 사진 (선택 — 위치 확인용)",
-                    type=["png", "jpg", "jpeg"],
-                    key="map_image_upload",
-                )
-                if map_image is not None:
-                    st.image(map_image, use_container_width=True)
-                else:
-                    st.markdown(
-                        '<div class="report-photo-slot"><div class="icon">🗺️</div>'
-                        "지도 사진 자리<br>위치 확인용 지도 이미지(준비 중)</div>",
-                        unsafe_allow_html=True,
-                    )
+                    with st.container(key="map_photo_block"):
+                        map_image = st.file_uploader(
+                            "지도 사진 (선택 — 위치 확인용)",
+                            type=["png", "jpg", "jpeg"],
+                            key="map_image_upload",
+                        )
+                        if map_image is not None:
+                            st.image(map_image, use_container_width=True)
+                        else:
+                            st.markdown(
+                                '<div class="report-photo-slot"><div class="icon">🗺️</div>'
+                                "지도 사진 자리<br>위치 확인용 지도 이미지(준비 중)</div>",
+                                unsafe_allow_html=True,
+                            )
             with content_col:
                 st.markdown(st.session_state["report_html"], unsafe_allow_html=True)
 
