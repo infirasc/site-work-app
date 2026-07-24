@@ -290,10 +290,12 @@ assert {k for k, _, _ in REFERENCE_FIELD_META} == set(REFERENCE_FIELDS), "REFERE
 # 코드를 넣는데, 이 sandbox 제약 때문에 카카오 위젯 내부의 "검색결과 클릭 → 완료 신호"가
 # 전달되지 않는 문제를 실제로 재현·확인했다(순수 HTML 페이지에서는 정상 동작, 같은 코드를
 # components.html 안에 넣으면 검색은 되는데 클릭 완료(oncomplete)가 전혀 안 옴).
-# app/static/kakao_address_search.html을 Streamlit 정적 파일 서빙(.streamlit/config.toml의
-# server.enableStaticServing)으로 올리고, 그 URL을 iframe으로 불러오면 이 sandbox가 안 씌워져서
-# 정상 동작한다.
-KAKAO_ADDRESS_SEARCH_URL = "/app/static/kakao_address_search.html"
+#
+# Streamlit 자체 정적 파일 서빙(server.enableStaticServing, app/static/)은 로컬에서는
+# 됐지만 Streamlit Community Cloud 배포본에서는 해당 경로가 빈 화면으로 떠서(확인됨) 못 쓴다.
+# 대신 이 저장소의 GitHub Pages(docs/kakao_address_search.html)에 페이지를 올려두고,
+# 그 실제 외부 URL을 iframe으로 불러온다 — 로컬/배포 환경 구분 없이 항상 동일하게 동작한다.
+KAKAO_ADDRESS_SEARCH_URL = "https://infirasc.github.io/site-work-app/kakao_address_search.html"
 
 
 def _parse_number(raw: str):
